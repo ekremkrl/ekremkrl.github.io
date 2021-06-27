@@ -1,0 +1,179 @@
+---
+title: "Final-Report-Fasces"
+author: "Mustafa Ekrem Körlü - Furkan Berk Efe"
+date: "27 06 2021"
+output: html_document
+---
+#Project Goal and Project Data
+
+## Project Goal
+
+ <font size="4px"> The main purpose of our project is to develop an estimation about when the Covid-19 pandemic, which started in 2019 and was named "global epidemic" in March 2020, preventing all humanity from their normal lives and causing some material and moral damage, will end in countries with a population of over 3 million worldwide.
+
+## Project Data
+
+In our initial data, all data related to predicting the end of the Covid-19 pandemic are available, except for the number of patients recovering, such as the total number of cases, the number of daily cases, the total number of deaths, and the number of daily deaths. Our project data can be accessed at "https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/owid-covid-data.csv".
+
+##Actions Taken
+
+
+## We added the libraries which we'll need in code.
+
+```{r,warning=F,message=F}
+library(tidyverse)
+library(readxl)
+library(readr)
+library(rmarkdown)
+library(magrittr)
+library(reshape2)
+library(corrplot)
+library(plotly)
+library(patchwork)
+library(hrbrthemes)
+
+```
+
+##Importing data from web to keep it updated.
+
+```{r}
+totalcases <- read.csv("https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/owid-covid-data.csv")
+
+```
+
+```{r}
+forrecovered <- read.csv("https://raw.githubusercontent.com/datasets/covid-19/master/data/countries-aggregated.csv")
+
+```
+
+##Getting ready the data for cleaning process.
+
+```{r}
+ totalcases %<>%
+  select( "location","date", "total_cases", "new_cases", "total_deaths", "new_deaths", "total_vaccinations", "people_vaccinated", "new_vaccinations", "population") %>% 
+  rename(Country = "location", Date="date") %>% 
+  rename(TotalCases="total_cases",NewCases= "new_cases",TotalDeath = "total_deaths", NewDeath = "new_deaths", TotalVaccinations = "total_vaccinations", PeopleVaccinated = "people_vaccinated", NewVaccination = "new_vaccinations", Population = "population")
+
+```
+Our assumption about our model is that; if a country's population is less than 3 millions we can't reach a suitable result on that country.
+
+And we checked that Countries about the data it announced is more than 365 to eliminate inappropriate data.
+
+```{r,warning=F,message=F}
+totalcases <-  filter(totalcases, Population>3000000)
+
+
+countries <- unique(totalcases$Country)
+x <- c()
+sum(totalcases$Country==countries)
+for(i in countries){
+  
+  if(sum(totalcases$Country==i)>=365){
+    x <- c(x,i)
+  }
+
+}
+```
+
+Bu döngüyle sadece türkmenistanın bu sınırlar dışında kaldığı anlaşılmıştır
+
+```{r}
+
+totalcases <- totalcases[-(totalcases$Country=='Turkmenistan'),]
+
+
+
+```
+
+#Let's do the necessary actions to give the number of people recovered in Turkey. 
+
+```{r}
+
+forrecovered <-  forrecovered[forrecovered$Country=='Turkey',]
+
+forrecovered =   forrecovered[-(1:49),]
+
+```
+
+
+```
+#Up to this point, we have carried out the necessary data cleaning processes. After that, we will try to obtain the necessary parameters for our model. 
+
+```{r}
+# In our estimation, we will focus on Turkey, so firstly let's pull Turkey from our totalcases dataset, which contains all the data. 
+
+totaldatastur <- totalcases[totalcases$Country=='Turkey',]
+
+view(totaldatastur)
+
+
+totalrecovered <- c(forrecovered$Recovered)
+
+as.numeric(totalrecovered)
+
+totaldatastur$Recovered <- as.numeric(totalrecovered)
+
+options(digits=9)
+
+totaldatastur$Recovered <- totalrecovered
+
+
+
+```
+
+
+```{r}
+
+## S (Suspectible) in SIR MODEL
+
+totaldatastur$Suspectible <- totaldatastur$Population - totaldatastur$Removed - totaldatastur$ActiveCases.I
+
+## I (infectious) in SIR MODEL
+
+totaldatastur$ActiveCases.I <- totaldatastur$TotalCases - totaldatastur$Recovered - totaldatastur$TotalDeath
+
+## R (Removed) in SIR MODEL
+
+totaldatastur$Removed <- totaldatastur$PeopleVaccinated + totaldatastur$Recovered + totaldatastur$TotalDeath 
+
+## Immuned is added to see linear regression Results
+
+totaldatastur$Immuned <- totaldatastur$PeopleVaccinated + totaldatastur$Recovered 
+
+totaldatastur[is.na(totaldatastur)] = 0
+```
+
+
+
+```{r}
+p <- plot_ly(x = totaldatastur$Date , y = totaldatastur$Removed, type="scatter", mode="line", fill = "tozeroy", name="Removed")
+p <- add_trace(p, x = totaldatastur$Date, y = totaldatastur$Suspectible, type="scatter", mode="line", fill = "red",name="Suspectible")
+p
+```
+##  As can be seen from the table, the pandemic is going backwards from the time the Removed and Suspectible lines merge. 
+
+```{r}
+p1 <- ggplot(totaldatastur, aes(x=Date, y=Suspectible)) +
+  geom_line(color="#green", size=2) +
+  ggtitle("Date-Suspectible") +
+  theme_ipsum()
+  
+p2 <- ggplot(totaldatastur, aes(x=Date, y=Removed)) +
+  geom_line(color="grey",size=2) +
+  ggtitle("Date-Removed") +
+  theme_ipsum()
+
+p1 + p2
+```
+
+
+```{r}
+library(plotrix)
+slices <- c(totaldatastur$Suspectible,totaldatastur$ActiveCases.I,totaldatastur$Removed)
+lbls <- c("Suspectible", "Infected", "Removed")
+pie3D(slices,labels=lbls,explode=0.1,
+   main="Pie Chart of SIR ")
+```
+
+
+
+
